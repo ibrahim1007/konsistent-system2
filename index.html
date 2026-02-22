@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Planner Terpadu 2026 Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        
+        .sidebar-item-active { background-color: #1e293b; border-left: 4px solid #3b82f6; color: white; }
+        
+        .calendar-day { 
+            min-height: 90px; display: flex; flex-direction: column; align-items: flex-start; 
+            justify-content: flex-start; cursor: pointer; border-radius: 8px; transition: all 0.2s; 
+            position: relative; border: 1px solid #e2e8f0; padding: 4px; background-color: white;
+            overflow: hidden;
+        }
+        @media (min-width: 768px) { .calendar-day { min-height: 120px; padding: 6px; } }
+        
+        /* Highlight Tanggal Hari Ini dengan List Hitam */
+        .today-highlight { 
+            border: 2.5px solid #0f172a !important; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+
+        .day-success { background-color: #f0fdf4 !important; border-color: #22c55e !important; }
+        .day-fail { background-color: #fef2f2 !important; border-color: #ef4444 !important; }
+        
+        .target-pill-1w { background-color: #0ea5e9; }
+        .target-pill-1m { background-color: #10b981; }
+        .target-pill-3m { background-color: #f59e0b; }
+        .target-pill-6m { background-color: #f43f5e; }
+
+        .target-pill, .task-pill, .recurring-pill {
+            font-size: 7px; padding: 1px 3px; border-radius: 3px; color: white; margin-top: 2px;
+            width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        @media (min-width: 768px) { .target-pill, .task-pill, .recurring-pill { font-size: 9px; padding: 2px 4px; margin-top: 3px; } }
+        
+        .task-pill { background-color: #64748b; }
+        .recurring-pill { background-color: #8b5cf6; }
+        
+        .quadrant-card { height: 280px; overflow-y: auto; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        
+        #sidebar { transition: transform 0.3s ease-in-out; }
+        .animate-pulse-subtle { animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .8; } }
+    </style>
+</head>
+<body class="text-slate-800 flex h-screen overflow-hidden bg-slate-50">
+
+    <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-slate-900/50 z-30 hidden lg:hidden"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="fixed inset-y-0 left-0 w-64 bg-slate-900 text-slate-300 flex flex-col shadow-xl z-40 transform -translate-x-full lg:translate-x-0 lg:static lg:inset-auto">
+        <div class="p-6 flex items-center justify-between text-white border-b border-slate-800">
+            <div class="flex items-center space-x-3">
+                <i class="fas fa-chart-line text-blue-500 text-2xl"></i>
+                <span class="font-bold tracking-widest text-sm uppercase text-blue-400">Konsistent</span>
+            </div>
+            <button onclick="toggleSidebar()" class="lg:hidden text-slate-400 hover:text-white"><i class="fas fa-times"></i></button>
+        </div>
+        
+        <nav class="flex-grow py-6 space-y-1 overflow-y-auto">
+            <button onclick="setView('dashboard')" id="nav-dashboard" class="w-full flex items-center space-x-3 px-6 py-3 text-sm transition sidebar-item-active">
+                <i class="fas fa-th-large w-5"></i><span>Dashboard</span>
+            </button>
+            <button onclick="setView('daily')" id="nav-daily" class="w-full flex items-center space-x-3 px-6 py-3 text-sm transition hover:bg-slate-800">
+                <i class="fas fa-list-check w-5"></i><span>Rencana Harian</span>
+            </button>
+            <button onclick="setView('recurring')" id="nav-recurring" class="w-full flex items-center space-x-3 px-6 py-3 text-sm transition hover:bg-slate-800">
+                <i class="fas fa-redo-alt w-5 text-purple-400"></i><span>Tugas Tetap</span>
+            </button>
+            <button onclick="setView('target')" id="nav-target" class="w-full flex items-center space-x-3 px-6 py-3 text-sm transition hover:bg-slate-800">
+                <i class="fas fa-bullseye w-5 text-rose-400"></i><span>Target Realistis</span>
+            </button>
+            <button onclick="setView('list-tugas')" id="nav-list-tugas" class="w-full flex items-center space-x-3 px-6 py-3 text-sm transition hover:bg-slate-800">
+                <i class="fas fa-clipboard-list w-5"></i><span>List Tugas</span>
+            </button>
+            <button onclick="setView('calendar')" id="nav-calendar" class="w-full flex items-center space-x-3 px-6 py-3 text-sm transition hover:bg-slate-800">
+                <i class="fas fa-calendar-alt w-5"></i><span>Kalender 2026</span>
+            </button>
+            <button onclick="setView('financial')" id="nav-financial" class="w-full flex items-center space-x-3 px-6 py-3 text-sm transition hover:bg-slate-800">
+                <i class="fas fa-wallet w-5 text-emerald-400"></i><span>Keuangan</span>
+            </button>
+        </nav>
+        
+        <div class="p-6 bg-slate-800/50 border-t border-slate-800">
+            <p class="text-[10px] text-slate-500 uppercase font-bold mb-2">Total Progres Sistem</p>
+            <div class="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                <div id="overall-progress" class="bg-blue-500 h-full w-0 transition-all duration-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
+            </div>
+            <p id="progress-text" class="text-[8px] text-slate-500 mt-1 uppercase text-right">0%</p>
+        </div>
+    </aside>
+
+    <div class="flex-grow flex flex-col overflow-hidden w-full">
+        <header class="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-4 lg:px-8 shrink-0">
+            <div class="flex items-center space-x-4">
+                <button onclick="toggleSidebar()" class="lg:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg"><i class="fas fa-bars"></i></button>
+                <h2 id="view-title" class="font-bold text-slate-700 uppercase tracking-widest text-xs sm:text-sm text-blue-600 truncate">Dashboard</h2>
+            </div>
+            <div id="current-date-display" class="hidden sm:block text-[10px] sm:text-xs font-mono font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full"></div>
+        </header>
+
+        <main class="flex-grow overflow-y-auto p-4 lg:p-8 bg-slate-50 scroll-smooth">
+            <div id="content-area" class="max-w-7xl mx-auto space-y-6 lg:space-y-8">
+                
+                <!-- VIEW: DASHBOARD -->
+                <div id="view-dashboard" class="space-y-6">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase">Tugas Hari Ini (Total)</p>
+                            <h3 id="dash-daily" class="text-xl lg:text-2xl font-bold text-slate-800">0</h3>
+                        </div>
+                        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-rose-500">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase">Target Aktif</p>
+                            <h3 id="dash-target" class="text-xl lg:text-2xl font-bold text-slate-800">0</h3>
+                        </div>
+                        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-emerald-500">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase">Probabilitas Konsisten</p>
+                            <h3 id="dash-probability" class="text-xl lg:text-2xl font-bold text-emerald-600">0%</h3>
+                        </div>
+                        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-purple-500">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase">Tugas Tetap</p>
+                            <h3 id="dash-recurring" class="text-xl lg:text-2xl font-bold text-purple-600">0</h3>
+                        </div>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-4">
+                        <div id="logic-status-card" class="flex-grow">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase">Evaluasi Konsistensi Harian</p>
+                            <h3 id="dash-logic-text" class="text-xs font-bold text-slate-500 italic">Memuat analisis...</h3>
+                        </div>
+                        <i id="dash-logic-icon" class="fas fa-info-circle text-slate-300 text-2xl"></i>
+                    </div>
+                </div>
+
+                <!-- VIEW: RENCANA HARIAN -->
+                <div id="view-daily" class="hidden space-y-6">
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 flex flex-col md:flex-row gap-3 shadow-sm">
+                        <input type="text" id="daily-input" placeholder="Rencana baru hari ini..." class="flex-grow bg-slate-50 border-none px-4 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                        <input type="time" id="daily-time" class="bg-slate-50 border-none px-4 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                        <select id="daily-quadrant" class="bg-slate-50 border-none px-4 py-2 rounded-lg text-sm outline-none">
+                            <option value="1">1. Penting - Mendesak</option>
+                            <option value="2">2. Penting - Tidak Mendesak</option>
+                            <option value="3">3. Tidak Penting - Mendesak</option>
+                            <option value="4">4. Tidak Penting - Tidak Mendesak</option>
+                        </select>
+                        <button onclick="addDailyTask()" class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-bold w-full md:w-auto">TAMBAH</button>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div class="bg-red-50 p-4 rounded-xl border border-red-100 shadow-inner">
+                            <h4 class="text-[10px] font-black text-red-600 uppercase mb-3 flex items-center"><i class="fas fa-fire mr-1"></i> Skala 1: Penting & Mendesak</h4>
+                            <div id="q-1" class="quadrant-card space-y-2"></div>
+                        </div>
+                        <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-inner">
+                            <h4 class="text-[10px] font-black text-blue-600 uppercase mb-3 flex items-center"><i class="fas fa-star mr-1"></i> Skala 2: Penting & Tidak Mendesak</h4>
+                            <div id="q-2" class="quadrant-card space-y-2"></div>
+                        </div>
+                        <div class="bg-amber-50 p-4 rounded-xl border border-amber-100 shadow-inner">
+                            <h4 class="text-[10px] font-black text-amber-600 uppercase mb-3 flex items-center"><i class="fas fa-bolt mr-1"></i> Skala 3: Tidak Penting & Mendesak</h4>
+                            <div id="q-3" class="quadrant-card space-y-2"></div>
+                        </div>
+                        <div class="bg-slate-100 p-4 rounded-xl border border-slate-200 shadow-inner">
+                            <h4 class="text-[10px] font-black text-slate-500 uppercase mb-3 flex items-center"><i class="fas fa-coffee mr-1"></i> Skala 4: Tidak Penting & Tidak Mendesak</h4>
+                            <div id="q-4" class="quadrant-card space-y-2"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VIEW: TARGET REALISTIS -->
+                <div id="view-target" class="hidden space-y-6">
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+                        <h3 class="text-sm font-black text-slate-700 uppercase tracking-widest"><i class="fas fa-bullseye mr-2 text-rose-500"></i> Perencanaan Target Realistis</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold text-slate-400 uppercase">Nama Target</label>
+                                <input type="text" id="target-input" placeholder="Misal: Mahir NextJS" class="w-full bg-slate-50 border-none px-4 py-2 rounded-lg text-sm focus:ring-2 focus:ring-rose-500">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold text-slate-400 uppercase">Mulai Tanggal</label>
+                                <input type="date" id="target-start-date" class="w-full bg-slate-50 border-none px-4 py-2 rounded-lg text-sm focus:ring-2 focus:ring-rose-500">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold text-slate-400 uppercase">Periode Waktu</label>
+                                <select id="target-period" class="w-full bg-slate-50 border-none px-4 py-2 rounded-lg text-sm focus:ring-2 focus:ring-rose-500">
+                                    <option value="1w">1 Minggu</option>
+                                    <option value="1m">1 Bulan</option>
+                                    <option value="3m">3 Bulan</option>
+                                    <option value="6m">6 Bulan</option>
+                                </select>
+                            </div>
+                            <div class="flex items-end">
+                                <button onclick="addTargetRealistis()" class="w-full bg-rose-600 text-white py-2 rounded-lg text-sm font-bold shadow-lg hover:bg-rose-700 transition">SIMPAN</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="target-list-container" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                </div>
+
+                <!-- VIEW: TUGAS TETAP -->
+                <div id="view-recurring" class="hidden space-y-6">
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+                        <h3 class="text-sm font-black text-slate-700 uppercase tracking-widest"><i class="fas fa-redo-alt mr-2 text-purple-600"></i> Tugas Rutin</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <input type="text" id="rec-name" placeholder="Nama tugas tetap..." class="bg-slate-50 border-none px-4 py-2 rounded-lg text-sm">
+                            <input type="time" id="rec-time" class="bg-slate-50 border-none px-4 py-2 rounded-lg text-sm">
+                            <select id="rec-quadrant" class="bg-slate-50 border-none px-4 py-2 rounded-lg text-sm">
+                                <option value="1">Skala 1</option><option value="2">Skala 2</option><option value="3">Skala 3</option><option value="4">Skala 4</option>
+                            </select>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <label class="flex items-center space-x-2 bg-slate-50 px-3 py-1 rounded-lg text-xs"><input type="checkbox" name="rec-days" value="1"> <span>Senin</span></label>
+                            <label class="flex items-center space-x-2 bg-slate-50 px-3 py-1 rounded-lg text-xs"><input type="checkbox" name="rec-days" value="2"> <span>Selasa</span></label>
+                            <label class="flex items-center space-x-2 bg-slate-50 px-3 py-1 rounded-lg text-xs"><input type="checkbox" name="rec-days" value="3"> <span>Rabu</span></label>
+                            <label class="flex items-center space-x-2 bg-slate-50 px-3 py-1 rounded-lg text-xs"><input type="checkbox" name="rec-days" value="4"> <span>Kamis</span></label>
+                            <label class="flex items-center space-x-2 bg-slate-50 px-3 py-1 rounded-lg text-xs"><input type="checkbox" name="rec-days" value="5"> <span>Jumat</span></label>
+                            <label class="flex items-center space-x-2 bg-slate-50 px-3 py-1 rounded-lg text-xs"><input type="checkbox" name="rec-days" value="6"> <span>Sabtu</span></label>
+                            <label class="flex items-center space-x-2 bg-slate-50 px-3 py-1 rounded-lg text-xs"><input type="checkbox" name="rec-days" value="0"> <span class="text-red-500">Minggu</span></label>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                            <select id="rec-period" class="bg-slate-50 border-none px-4 py-2 rounded-lg text-sm"><option value="3">3 Bulan</option><option value="6">6 Bulan</option><option value="12">1 Tahun</option><option value="999">Selamanya</option></select>
+                            <button id="rec-btn-save" onclick="saveRecurringTask()" class="bg-purple-600 text-white py-2 rounded-lg text-sm font-bold">SIMPAN</button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-2xl border border-slate-200 overflow-x-auto shadow-sm">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-slate-900 text-white font-bold uppercase">
+                                <tr><th class="p-4">Tugas</th><th class="p-4">Jadwal</th><th class="p-4">Skala</th><th class="p-4 text-center">Aksi</th></tr>
+                            </thead>
+                            <tbody id="rec-list-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- VIEW: LIST TUGAS -->
+                <div id="view-list-tugas" class="hidden space-y-8">
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <input type="text" id="tugas-input" placeholder="Nama tugas..." class="bg-slate-50 border-none px-4 py-2 rounded-lg text-sm outline-none">
+                            <input type="date" id="tugas-date" class="bg-slate-50 border-none px-4 py-2 rounded-lg text-sm outline-none">
+                            <button onclick="addListTugas()" class="bg-green-600 text-white py-2 rounded-lg text-sm font-bold">TAMBAH</button>
+                        </div>
+                    </div>
+                    <div id="tugas-list-raw" class="space-y-2"></div>
+                </div>
+
+                <!-- VIEW: KALENDER -->
+                <div id="view-calendar" class="hidden space-y-6">
+                    <div class="bg-white p-4 sm:p-8 rounded-2xl border border-slate-200 shadow-sm">
+                        <div class="flex justify-between items-center mb-6">
+                            <button onclick="changeMonth(-1)" class="p-2 hover:bg-slate-100 rounded-full transition-colors"><i class="fas fa-chevron-left text-slate-500"></i></button>
+                            <div class="text-center">
+                                <h3 id="cal-month" class="font-black text-slate-800 uppercase tracking-tighter text-sm sm:text-lg">Januari 2026</h3>
+                            </div>
+                            <button onclick="changeMonth(1)" class="p-2 hover:bg-slate-100 rounded-full transition-colors"><i class="fas fa-chevron-right text-slate-500"></i></button>
+                        </div>
+                        <div class="grid grid-cols-7 gap-1 sm:gap-3 text-center mb-2">
+                            <div class="text-[8px] sm:text-[10px] font-black text-red-500 uppercase">Min</div>
+                            <div class="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase">Sen</div>
+                            <div class="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase">Sel</div>
+                            <div class="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase">Rab</div>
+                            <div class="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase">Kam</div>
+                            <div class="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase">Jum</div>
+                            <div class="text-[8px] sm:text-[10px] font-black text-red-500 uppercase">Sab</div>
+                        </div>
+                        <div id="calendar-grid" class="grid grid-cols-7 gap-1 sm:gap-3"></div>
+                    </div>
+                </div>
+
+                <!-- VIEW: KEUANGAN -->
+                <div id="view-financial" class="hidden space-y-8">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="bg-white p-6 rounded-2xl border-l-4 border-l-green-500 shadow-sm font-bold">Pemasukan: <span id="fin-income">Rp 0</span></div>
+                        <div class="bg-white p-6 rounded-2xl border-l-4 border-l-red-500 shadow-sm font-bold">Pengeluaran: <span id="fin-expense">Rp 0</span></div>
+                        <div class="bg-slate-900 p-6 rounded-2xl border-l-4 border-l-blue-500 text-white shadow-sm font-bold">Saldo: <span id="fin-balance">Rp 0</span></div>
+                    </div>
+                </div>
+
+                <!-- SECTION: GRAFIK KURVA -->
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm border-t-8 border-t-blue-500">
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6"><i class="fas fa-chart-area mr-2 text-blue-500"></i> Tren Skor Konsistensi</h3>
+                    <div style="height: 250px;"><canvas id="consistencyChart"></canvas></div>
+                </div>
+
+                <!-- GLOBAL NOTES -->
+                <div class="pb-12">
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest"><i class="fas fa-sticky-note mr-2"></i> Brainstorming / Notes</h3>
+                    <textarea id="general-notes" oninput="saveGeneralNotes()" placeholder="Tuliskan ide bebas Anda di sini..." class="w-full h-40 bg-white border border-slate-200 p-6 rounded-2xl text-sm shadow-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all"></textarea>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let currentView = 'dashboard';
+        let currentMonth = new Date().getMonth(); 
+        const year = 2026;
+        let consistencyChart = null;
+        let editingRecId = null;
+
+        let state = { 
+            daily: [], targets: [], listTugas: [], financials: [], 
+            recurringTasks: [], recurringDone: {}, generalNotes: '' 
+        };
+
+        const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+        const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+
+        function init() {
+            const saved = localStorage.getItem('planner_state_2026_pro_v3_v6');
+            if (saved) state = JSON.parse(saved);
+            document.getElementById('current-date-display').innerText = new Date().toLocaleDateString('id-ID', { day:'numeric', month:'long', year:'numeric' });
+            document.getElementById('general-notes').value = state.generalNotes || '';
+            updateUI();
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            const isHidden = sidebar.classList.contains('-translate-x-full');
+            sidebar.classList.toggle('-translate-x-full', !isHidden);
+            overlay.classList.toggle('hidden', !isHidden);
+        }
+
+        function setView(view) {
+            currentView = view;
+            if (view === 'calendar') currentMonth = new Date().getMonth();
+
+            const views = ['dashboard', 'daily', 'target', 'calendar', 'list-tugas', 'financial', 'recurring'];
+            views.forEach(v => document.getElementById('view-' + v).classList.add('hidden'));
+            document.getElementById('view-' + view).classList.remove('hidden');
+            
+            const navs = ['dashboard', 'daily', 'target', 'calendar', 'list-tugas', 'financial', 'recurring'];
+            navs.forEach(n => {
+                const el = document.getElementById('nav-' + n);
+                n === view ? el.classList.add('sidebar-item-active') : el.classList.remove('sidebar-item-active');
+            });
+
+            document.getElementById('view-title').innerText = view === 'target' ? 'TARGET REALISTIS' : view.replace('-', ' ').toUpperCase();
+            if (window.innerWidth < 1024) toggleSidebar();
+            updateUI();
+        }
+
+        function addTargetRealistis() {
+            const name = document.getElementById('target-input').value;
+            const startDateStr = document.getElementById('target-start-date').value;
+            const period = document.getElementById('target-period').value;
+            if (!name || !startDateStr) return;
+            const startDate = new Date(startDateStr);
+            let endDate = new Date(startDate);
+            if (period === '1w') endDate.setDate(startDate.getDate() + 7);
+            if (period === '1m') endDate.setMonth(startDate.getMonth() + 1);
+            if (period === '3m') endDate.setMonth(startDate.getMonth() + 3);
+            if (period === '6m') endDate.setMonth(startDate.getMonth() + 6);
+            state.targets.push({ id: Date.now(), name, startDate: startDate.toISOString().split('T')[0], endDate: endDate.toISOString().split('T')[0], period, done: false });
+            document.getElementById('target-input').value = '';
+            document.getElementById('target-start-date').value = '';
+            saveAndRefresh();
+        }
+
+        function deleteTarget(id) { state.targets = state.targets.filter(t => t.id !== id); saveAndRefresh(); }
+
+        function renderTargets() {
+            const container = document.getElementById('target-list-container');
+            container.innerHTML = '';
+            state.targets.forEach(t => {
+                const labels = { '1w': '1 Minggu', '1m': '1 Bulan', '3m': '3 Bulan', '6m': '6 Bulan' };
+                const div = document.createElement('div');
+                div.className = "p-4 rounded-xl border-l-4 bg-white shadow-sm flex flex-col justify-between border-slate-200";
+                div.innerHTML = `<div><h4 class="font-bold text-xs uppercase text-slate-800">${t.name}</h4><p class="text-[9px] font-bold text-blue-500">${labels[t.period]}</p><p class="text-[10px] font-mono">${t.startDate} s/d ${t.endDate}</p></div><button onclick="deleteTarget(${t.id})" class="text-red-400 mt-2 text-right"><i class="fas fa-trash"></i></button>`;
+                container.appendChild(div);
+            });
+        }
+
+        function saveRecurringTask() {
+            const name = document.getElementById('rec-name').value;
+            const time = document.getElementById('rec-time').value;
+            const quad = document.getElementById('rec-quadrant').value;
+            const period = parseInt(document.getElementById('rec-period').value);
+            const checkboxes = document.querySelectorAll('input[name="rec-days"]:checked');
+            const days = Array.from(checkboxes).map(cb => parseInt(cb.value));
+            if (!name || days.length === 0) return;
+            const taskData = { id: editingRecId || Date.now(), name, time, quad, period, days, createdAt: new Date().toISOString() };
+            if (editingRecId) { state.recurringTasks = state.recurringTasks.map(t => t.id === editingRecId ? taskData : t); editingRecId = null; }
+            else { state.recurringTasks.push(taskData); }
+            saveAndRefresh();
+        }
+
+        function isRecurringValid(task, dateKey) {
+            const checkDate = new Date(dateKey);
+            if (!task.days.includes(checkDate.getDay())) return false;
+            if (task.period === 999) return true;
+            const start = new Date(task.createdAt);
+            const diffMonths = (checkDate.getFullYear() - start.getFullYear()) * 12 + (checkDate.getMonth() - start.getMonth());
+            return diffMonths < task.period;
+        }
+
+        function addDailyTask() {
+            const input = document.getElementById('daily-input');
+            const time = document.getElementById('daily-time').value;
+            const q = document.getElementById('daily-quadrant').value;
+            if (!input.value.trim()) return;
+            state.daily.push({ id: Date.now(), text: input.value, time, quadrant: q, done: false, date: new Date().toISOString().split('T')[0] });
+            input.value = ''; saveAndRefresh();
+        }
+
+        function addListTugas() {
+            const input = document.getElementById('tugas-input');
+            const date = document.getElementById('tugas-date').value;
+            if (!input.value.trim() || !date) return;
+            state.listTugas.push({ id: Date.now(), text: input.value, date, done: false });
+            input.value = ''; saveAndRefresh();
+        }
+
+        function getDayStatus(dateKey) {
+            const manualTasks = state.daily.filter(t => t.date === dateKey);
+            const recTasks = state.recurringTasks.filter(t => isRecurringValid(t, dateKey));
+            const total = manualTasks.length + recTasks.length;
+            if (total === 0) return 'none';
+            return (total >= 5 && manualTasks.every(t => t.done)) ? 'success' : 'fail';
+        }
+
+        function saveAndRefresh() { localStorage.setItem('planner_state_2026_pro_v3_v6', JSON.stringify(state)); updateUI(); }
+        function saveGeneralNotes() { state.generalNotes = document.getElementById('general-notes').value; localStorage.setItem('planner_state_2026_pro_v3_v6', JSON.stringify(state)); }
+        function changeMonth(dir) { currentMonth = (currentMonth + dir + 12) % 12; renderCalendar(); }
+
+        function updateUI() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('dash-daily').innerText = state.daily.filter(t => t.date === today).length + state.recurringTasks.filter(t => isRecurringValid(t, today)).length;
+            document.getElementById('dash-target').innerText = state.targets.length;
+            document.getElementById('dash-recurring').innerText = state.recurringTasks.length;
+            renderDaily(); renderTargets(); renderCalendar(); renderCharts();
+            const total = state.daily.length + state.targets.length + state.listTugas.length + state.recurringTasks.length;
+            const done = state.daily.filter(t=>t.done).length;
+            const p = total ? Math.round((done/total)*100) : 0;
+            document.getElementById('overall-progress').style.width = p + '%';
+            document.getElementById('progress-text').innerText = p + '%';
+        }
+
+        function renderDaily() {
+            const today = new Date().toISOString().split('T')[0];
+            for (let i = 1; i <= 4; i++) {
+                const container = document.getElementById('q-' + i);
+                container.innerHTML = '';
+                state.daily.filter(t => t.date === today && t.quadrant == i).forEach(t => {
+                    const div = document.createElement('div');
+                    div.className = `flex items-center justify-between p-2 bg-white rounded-lg border shadow-sm text-[10px] ${t.done ? 'opacity-50' : ''}`;
+                    div.innerHTML = `<div><span class="font-bold">${t.text}</span><p class="text-[8px] text-blue-500">${t.time || '--:--'}</p></div>`;
+                    container.appendChild(div);
+                });
+            }
+        }
+
+        function renderCalendar() {
+            const grid = document.getElementById('calendar-grid'); grid.innerHTML = '';
+            document.getElementById('cal-month').innerText = `${monthNames[currentMonth]} ${year}`;
+            const now = new Date();
+            const todayDate = now.getDate();
+            const todayMonth = now.getMonth();
+            const todayYear = now.getFullYear();
+            const first = new Date(year, currentMonth, 1).getDay();
+            const days = new Date(year, currentMonth + 1, 0).getDate();
+            for (let i = 0; i < first; i++) grid.appendChild(document.createElement('div')).className = "bg-slate-50/50 rounded-lg";
+            for (let d = 1; d <= days; d++) {
+                const dateKey = `${year}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const status = getDayStatus(dateKey);
+                const dayOfWeek = new Date(year, currentMonth, d).getDay();
+                
+                // LOGIKA: Hari Sabtu (6) dan Minggu (0) angka berwarna merah
+                const isHoliday = (dayOfWeek === 0 || dayOfWeek === 6); 
+                const isToday = (todayYear === year && todayMonth === currentMonth && todayDate === d);
+                
+                const cell = document.createElement('div');
+                cell.className = `calendar-day ${isToday ? 'today-highlight' : ''}`;
+                cell.innerHTML = `<span class="text-[9px] sm:text-xs font-black ${isToday ? 'text-blue-600' : (isHoliday ? 'text-red-600 font-bold' : 'text-slate-800')}">${d}</span>`;
+                
+                if (status === 'success') cell.classList.add('day-success');
+                if (status === 'fail') cell.classList.add('day-fail');
+
+                state.targets.forEach(t => { if (dateKey >= t.startDate && dateKey <= t.endDate) { cell.innerHTML += `<div class="target-pill target-pill-${t.period}">${t.name}</div>`; } });
+                state.listTugas.filter(t => t.date === dateKey).forEach(t => { cell.innerHTML += `<div class="task-pill">${t.text}</div>`; });
+                state.recurringTasks.filter(t => isRecurringValid(t, dateKey)).forEach(t => { cell.innerHTML += `<div class="recurring-pill">${t.name}</div>`; });
+                grid.appendChild(cell);
+            }
+        }
+
+        function renderCharts() {
+            if (consistencyChart) consistencyChart.destroy();
+            let labels = [], points = [], score = 0;
+            for(let i=14; i>=0; i--) {
+                const d = new Date(); d.setDate(d.getDate()-i); const key = d.toISOString().split('T')[0];
+                const s = getDayStatus(key); s==='success' ? score++ : (s==='fail' ? score=Math.max(0,score-1) : null);
+                labels.push(d.getDate()+'/'+(d.getMonth()+1)); points.push(score);
+            }
+            consistencyChart = new Chart(document.getElementById('consistencyChart'), { type:'line', data:{ labels, datasets:[{label:'Skor',data:points,borderColor:'#3b82f6',tension:0.3,fill:false}]}, options:{maintainAspectRatio:false, plugins:{legend:{display:false}}}});
+        }
+
+        init();
+        setView('dashboard');
+    </script>
+</body>
+</html>
